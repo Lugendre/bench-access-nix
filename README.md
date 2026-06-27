@@ -2,19 +2,21 @@
 
 Twingate越しに、Debianベンチホストのデバッグプローブ（probe-rs）と UART（kble-serialport）をローカルから双方向利用するためのデプロイ。
 
-入力 flake: `kble-nix`（kble-serialport）と `probe-rs-tools-nix`（remote feature 付き probe-rs）。
+入力 flake: `kble-nix`（kble-serialport）と `probe-rs-tools-nix`（github:Lugendre/probe-rs-tools-nix、remote feature 付き probe-rs）。バージョンは `flake.lock` でピン解決されます。
 
 ## リモート（Debian, root）でのセットアップ
 
+前提: Debian ホストに **Nix（flake 機能有効）がインストール済み**であること（`install.sh` が `nix build` を実行するため必須）。
+
 ```bash
-git clone <this repo> && cd bench-access-nix
+git clone <repo-url> && cd bench-access-nix
 # Twingate 到達 IF の IP を指定（取得できなければ 0.0.0.0 のまま + host firewall）
 sudo TWINGATE_ADDR=100.x.y.z ./install.sh
 ```
 
 `install.sh` は両サーバを `nix build` して `/opt/bench-access` に GC root として固定し、`/etc/bench-access/.probe-rs.toml`・udev ルール・systemd ユニットを設置して有効化します。
 
-初回は **`/etc/bench-access/.probe-rs.toml` を編集**してください（`[server]` の `address`/`port`、`[[server.users]]` の `token`/`access`）。編集後に再起動:
+初回は **`/etc/bench-access/.probe-rs.toml` を編集**してください（`[server]` の `address`/`port`、`[[server.users]]` の `token`/`access`）。`token` は任意の秘密文字列でよく、例えば `openssl rand -hex 32` で生成します（例ファイルのプレースホルダも同趣旨なので必ず置き換えること）。編集後に再起動:
 
 ```bash
 sudo systemctl restart probe-rs-serve.service
@@ -28,7 +30,7 @@ systemctl status probe-rs-serve.service kble-serialport.service
 
 ## ローカル（各 consumer）からの接続
 
-`<host>` は Twingate 到達名/IP。
+`<host>` は Twingate 到達名/IP。ローカル側の前提ツール: シリアル利用には **websocat**（PTY を生やす手順では追加で **socat**）、プローブ利用には **probe-rs** が必要。
 
 ### デバッグプローブ（probe-rs）
 
@@ -40,26 +42,32 @@ probe-rs run app.elf --chip <CHIP> --probe <VID:PID:Serial> --host ws://<host>:3
 probe-rs attach --chip <CHIP> --probe <VID:PID:Serial> --host ws://<host>:3000 --token <tok>
 ```
 
+`--probe` に渡す `<VID:PID:Serial>` は、上の `probe-rs list --host ... --token ...` の出力に表示されるので、そこからコピーします。
+
 GDB/DAP はリモート非対応（probe-rs serve の制約）。必要ならローカルで別途。
 
-### シリアル（websocat 一本で3用途）
+### シリアル（websocat ベースの各用途）
 
-`?port=` は必ず `/dev/serial/by-id/...`（USBシリアルの番号は挿し直しで入れ替わるため）。URL は `&` を含むので**クォート必須**。
+`?port=` は必ず `/dev/serial/by-id/...`（USBシリアルの `/dev/ttyUSB*` 番号は挿し直しで入れ替わるため）。`<id>` はリモートで `ls /dev/serial/by-id/` を実行して確認します。URL は `&` を含むので**クォート必須**。
 
 ```bash
-# 人間（端末で直接）
+# 端末で直接 / パイプ越し（同一コマンド）
+# 端末で実行すれば対話的に入出力でき、stdin/stdout をパイプすれば
+# Claude Code やスクリプトからプログラム的に読み書きできる。
 websocat -b "ws://<host>:9600/open?port=/dev/serial/by-id/<id>&baudrate=115200"
 
-# 人間（screen/minicom で開く: ローカル PTY を生やす）
-websocat -b pty:/tmp/uart "ws://<host>:9600/open?port=/dev/serial/by-id/<id>&baudrate=115200" &
-screen /tmp/uart 115200
-
-# アプリ（ローカル TCP 化）
+# アプリ（ローカル TCP 化）: 5000 は例。空きポートを選ぶ
 websocat -b tcp-l:127.0.0.1:5000 "ws://<host>:9600/open?port=/dev/serial/by-id/<id>&baudrate=115200"
 # → 既存アプリは localhost:5000 へ接続
+```
 
-# Claude Code / スクリプト（stdin/stdout パイプ）
-websocat -b "ws://<host>:9600/open?port=/dev/serial/by-id/<id>&baudrate=115200"
+screen/minicom で開きたい場合は、websocat の stdio を **socat** で安定した PTY シンボリックリンクに橋渡しします（websocat 単体には固定パスを与える PTY 機能はないため）。`socat` の `pty,link=` が割り当てた pts への symlink を `/tmp/uart` に作るので、それを別端末で開きます:
+
+```bash
+socat -d -d pty,link=/tmp/uart,raw,echo=0 \
+  system:'websocat -b "ws://<host>:9600/open?port=/dev/serial/by-id/<id>&baudrate=115200"'
+# 別端末で:
+screen /tmp/uart 115200
 ```
 
 任意パラメータ: `&databits=8&flowcontrol=none&parity=none&stopbits=1`（既定値）。
@@ -73,4 +81,9 @@ websocat -b "ws://<host>:9600/open?port=/dev/serial/by-id/<id>&baudrate=115200"
 
 ## 非rootで運用したい場合（任意・ハードニング）
 
-専用ユーザ `bench` を作り `dialout`(シリアル)・`plugdev`(プローブ) に追加し、両ユニットに `User=bench` と `SupplementaryGroups=dialout plugdev` を加える。同梱 udev ルールは `GROUP="plugdev"` + `TAG+="uaccess"` でアクセスを与える。`HOME` も `bench` のホームに合わせ、`.probe-rs.toml` をそこへ置く。
+1. 専用ユーザ `bench` を作成する。
+2. `bench` を `dialout`（シリアル）・`plugdev`（プローブ）グループに追加する。
+3. 両ユニット（`kble-serialport.service` / `probe-rs-serve.service`）に `User=bench` と `SupplementaryGroups=dialout plugdev` を加える。
+4. `HOME` を `bench` のホームに合わせ、`.probe-rs.toml` をそのユーザ配下に置く。
+
+同梱の udev ルールは `GROUP="plugdev"` + `TAG+="uaccess"` でプローブへのアクセスを与えます。
