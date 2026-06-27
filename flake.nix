@@ -3,9 +3,7 @@
 
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
-    # During development, kble-nix is referenced by local path; switch to
-    # github:Lugendre/kble-nix once published.
-    kble-nix.url = "path:/home/nixos/Workspace/kble-nix";
+    kble-nix.url = "github:Lugendre/kble-nix";
     probe-rs-tools-nix.url = "github:Lugendre/probe-rs-tools-nix";
   };
 
