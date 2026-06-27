@@ -22,6 +22,8 @@
 #   Verified from probe-rs-tools v0.31.0 source:
 #   probe-rs-tools/src/bin/probe-rs/cmd/serve.rs  – ServerConfig / ServerUser
 #   probe-rs-tools/src/bin/probe-rs/rpc/functions.rs – ProbeAccess
+#     (the ProbeAccess enum has #[serde(rename_all = "snake_case")], so its
+#      variant names are lowercase: "all" / "allow" / "deny")
 #   https://github.com/probe-rs/probe-rs/blob/v0.31.0/probe-rs-tools/src/bin/probe-rs/cmd/serve.rs
 
 [server]
@@ -47,12 +49,15 @@ port = 3000
 #             string (e.g. `openssl rand -hex 32`).
 #
 # Optional field:
-#   access – controls which debug probes this user may open.  Three variants:
+#   access – controls which debug probes this user may open.  Three variants.
+#            NOTE: the enum is serde(rename_all = "snake_case"), so the variant
+#            names are LOWERCASE in the config ("all", "allow", "deny") — using
+#            PascalCase here would fail to deserialize.
 #
-#     access = "All"              # default when the field is omitted
+#     access = "all"              # default when the field is omitted
 #       Allow access to every probe attached to the host.
 #
-#     access = { Allow = ["VID:PID", "VID:PID:SERIAL"] }
+#     access = { allow = ["VID:PID", "VID:PID:SERIAL"] }
 #       Whitelist: only the listed probes are accessible.
 #       Format per entry: "VVVV:PPPP" (4-hex-digit VID and PID, no serial) or
 #                         "VVVV:PPPP:SERIAL" (with serial number appended).
@@ -60,7 +65,7 @@ port = 3000
 #                "0d28:0204:0700000029284e4500318006c8c00042e2000000"
 #                matches exactly one unit.
 #
-#     access = { Deny = ["VID:PID", ...] }
+#     access = { deny = ["VID:PID", ...] }
 #       Blacklist: all probes except the listed ones are accessible.
 # ---------------------------------------------------------------------------
 
@@ -68,16 +73,16 @@ port = 3000
 [[server.users]]
 name  = "alice"
 token = "CHANGE_ME_use_openssl_rand_hex_32"
-# access = "All"   # this is the default; uncomment to be explicit
+# access = "all"   # this is the default; uncomment to be explicit
 
 # Example: a CI runner restricted to one specific J-Link probe (by VID:PID:serial).
 # [[server.users]]
 # name   = "ci-runner"
 # token  = "CHANGE_ME_different_token_per_user"
-# access = { Allow = ["1366:0101:000123456789"] }
+# access = { allow = ["1366:0101:000123456789"] }
 
 # Example: a user who may use any probe except a particular ST-Link.
 # [[server.users]]
 # name   = "restricted"
 # token  = "CHANGE_ME_yet_another_token"
-# access = { Deny = ["0483:3748"] }
+# access = { deny = ["0483:3748"] }
