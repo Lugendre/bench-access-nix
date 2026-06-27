@@ -3,12 +3,13 @@ set -euo pipefail
 
 # Deploy probe-rs serve + kble-serialport on a Debian host via systemd.
 # Run as root. Env vars:
-#   FLAKE         deployment flake ref (default: current directory)
+#   FLAKE         deployment flake ref (default: directory containing install.sh)
 #   TWINGATE_ADDR kble-serialport --addr bind address (default: 0.0.0.0)
 
 PREFIX=/opt/bench-access
 CONFIG_HOME=/etc/bench-access
-FLAKE="${FLAKE:-$(pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+FLAKE="${FLAKE:-$SCRIPT_DIR}"
 TWINGATE_ADDR="${TWINGATE_ADDR:-0.0.0.0}"
 NIX_FLAGS=(--extra-experimental-features 'nix-command flakes')
 
@@ -29,24 +30,31 @@ nix "${NIX_FLAGS[@]}" build "${FLAKE}#probe-rs"        --out-link "$PREFIX/probe
 
 # probe-rs server config: install once; operator edits tokens/bind before real use.
 if [ ! -f "$CONFIG_HOME/.probe-rs.toml" ]; then
-  install -m 600 ./config/probe-rs.toml.example "$CONFIG_HOME/.probe-rs.toml"
+  install -m 600 "$SCRIPT_DIR/config/probe-rs.toml.example" "$CONFIG_HOME/.probe-rs.toml"
   echo "Installed $CONFIG_HOME/.probe-rs.toml - EDIT tokens/bind/probe-access before real use." >&2
 else
   echo "$CONFIG_HOME/.probe-rs.toml already exists - left unchanged." >&2
 fi
 
 # udev rules for debug probes.
-install -m 644 ./udev/69-probe-rs.rules /etc/udev/rules.d/69-probe-rs.rules
+install -m 644 "$SCRIPT_DIR/udev/69-probe-rs.rules" /etc/udev/rules.d/69-probe-rs.rules
 udevadm control --reload
-udevadm trigger
+udevadm trigger --subsystem-match=usb --subsystem-match=tty --subsystem-match=hidraw
 
 # systemd unit templates: substitute placeholders and install.
 sed -e "s#@KBLE@#$PREFIX/kble-serialport/bin/kble-serialport#g" \
     -e "s#@ADDR@#$TWINGATE_ADDR#g" \
-    ./systemd/kble-serialport.service > /etc/systemd/system/kble-serialport.service
+    "$SCRIPT_DIR/systemd/kble-serialport.service" > /etc/systemd/system/kble-serialport.service
 sed -e "s#@PROBE_RS@#$PREFIX/probe-rs/bin/probe-rs#g" \
     -e "s#@HOME@#$CONFIG_HOME#g" \
-    ./systemd/probe-rs-serve.service > /etc/systemd/system/probe-rs-serve.service
+    "$SCRIPT_DIR/systemd/probe-rs-serve.service" > /etc/systemd/system/probe-rs-serve.service
+
+for unit in kble-serialport.service probe-rs-serve.service; do
+  if grep -qF '@' "/etc/systemd/system/$unit"; then
+    echo "BUG: unresolved placeholder in $unit" >&2
+    exit 1
+  fi
+done
 
 systemctl daemon-reload
 systemctl enable --now kble-serialport.service probe-rs-serve.service
