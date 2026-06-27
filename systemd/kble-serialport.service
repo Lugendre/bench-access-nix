@@ -1,0 +1,15 @@
+[Unit]
+Description=kble-serialport (UART <-> WebSocket bridge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# --addr is the Twingate-reachable interface IP (or 0.0.0.0 + host firewall).
+# --port is the TCP listen port; clients pick the serial device via ?port= in the URL.
+ExecStart=@KBLE@ --addr @ADDR@ --port 9600
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
