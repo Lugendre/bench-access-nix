@@ -1,0 +1,26 @@
+[Unit]
+Description=probe-rs remote server (debug probe access over WebSocket)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# probe-rs reads its server config (bind address, port, users, tokens, probe
+# access) from the first .probe-rs.toml/.probe-rs.json/.probe-rs.yaml it finds
+# in this search order: cwd, directory of the executable, then $HOME.
+# The [server] section of that file is deserialized into ServerConfig.
+# (probe-rs serve has no --bind/--port CLI flag.)
+# Setting HOME=@HOME@ ensures the home-directory search hits @HOME@/.probe-rs.toml.
+# WorkingDirectory=@HOME@ puts cwd there too, so cwd and $HOME searches converge
+# on the same directory — one file at @HOME@/.probe-rs.toml covers both.
+# The '-' prefix on WorkingDirectory suppresses the "not absolute" error when
+# verifying the unsubstituted template; after sed substitution it resolves to
+# an absolute path (e.g. /root) and the prefix has no effect.
+Environment=HOME=@HOME@
+WorkingDirectory=-@HOME@
+ExecStart=@PROBE_RS@ serve
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
