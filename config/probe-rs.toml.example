@@ -1,0 +1,83 @@
+# probe-rs server configuration example
+#
+# INSTALLATION
+#   An installer should place this file at $HOME/.probe-rs.toml, where HOME is
+#   the value set by the systemd unit (Environment=HOME=@HOME@ in
+#   systemd/probe-rs-serve.service).  The WorkingDirectory is also set to @HOME@,
+#   so both the cwd and the $HOME searches in probe-rs's config-file lookup
+#   converge on the same location.
+#
+# WHY THIS FILE EXISTS
+#   `probe-rs serve` has NO --bind, --port, or --user CLI flags.  All server
+#   behaviour (bind address, TCP port, user tokens, per-user probe access) lives
+#   entirely in the [server] section of this config file.
+#
+# RELATIONSHIP TO kble-serialport
+#   This file is for probe-rs only.  kble-serialport is a separate service
+#   (systemd/kble-serialport.service) that bridges UART to WebSocket; its bind
+#   address and port are configured via its own --addr / --port CLI flags and
+#   are unrelated to the settings below.
+#
+# SCHEMA SOURCE
+#   Verified from probe-rs-tools v0.31.0 source:
+#   probe-rs-tools/src/bin/probe-rs/cmd/serve.rs  – ServerConfig / ServerUser
+#   probe-rs-tools/src/bin/probe-rs/rpc/functions.rs – ProbeAccess
+#   https://github.com/probe-rs/probe-rs/blob/v0.31.0/probe-rs-tools/src/bin/probe-rs/cmd/serve.rs
+
+[server]
+# Bind address for the WebSocket server.
+# Default when omitted: "0.0.0.0" (all interfaces).
+# Restrict access via Twingate ACLs and/or the host firewall rather than
+# binding to a specific interface, unless you want hard isolation at the
+# socket layer.
+address = "0.0.0.0"
+
+# TCP port probe-rs listens on.
+# Default when omitted: 3000
+port = 3000
+
+# ---------------------------------------------------------------------------
+# Users
+#
+# Each [[server.users]] entry defines one client identity.
+# Required fields (both mandatory, no defaults):
+#   name   – human-readable label used in server log messages
+#   token  – shared secret; the client hashes (SHA-512) the server challenge
+#             concatenated with this token to authenticate.  Use a long random
+#             string (e.g. `openssl rand -hex 32`).
+#
+# Optional field:
+#   access – controls which debug probes this user may open.  Three variants:
+#
+#     access = "All"              # default when the field is omitted
+#       Allow access to every probe attached to the host.
+#
+#     access = { Allow = ["VID:PID", "VID:PID:SERIAL"] }
+#       Whitelist: only the listed probes are accessible.
+#       Format per entry: "VVVV:PPPP" (4-hex-digit VID and PID, no serial) or
+#                         "VVVV:PPPP:SERIAL" (with serial number appended).
+#       Example: "0d28:0204" matches any DAPLink probe regardless of serial;
+#                "0d28:0204:0700000029284e4500318006c8c00042e2000000"
+#                matches exactly one unit.
+#
+#     access = { Deny = ["VID:PID", ...] }
+#       Blacklist: all probes except the listed ones are accessible.
+# ---------------------------------------------------------------------------
+
+# Example: a developer with full probe access.
+[[server.users]]
+name  = "alice"
+token = "CHANGE_ME_use_openssl_rand_hex_32"
+# access = "All"   # this is the default; uncomment to be explicit
+
+# Example: a CI runner restricted to one specific J-Link probe (by VID:PID:serial).
+# [[server.users]]
+# name   = "ci-runner"
+# token  = "CHANGE_ME_different_token_per_user"
+# access = { Allow = ["1366:0101:000123456789"] }
+
+# Example: a user who may use any probe except a particular ST-Link.
+# [[server.users]]
+# name   = "restricted"
+# token  = "CHANGE_ME_yet_another_token"
+# access = { Deny = ["0483:3748"] }
