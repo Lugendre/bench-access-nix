@@ -2,6 +2,10 @@
 Description=kble-serialport (UART <-> WebSocket bridge)
 After=network-online.target
 Wants=network-online.target
+# Allow up to 5 restarts within 60s before giving up; without this a crash-loop
+# would hit the default start limit and leave the unit permanently stopped.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple

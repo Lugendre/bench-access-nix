@@ -2,6 +2,11 @@
 Description=probe-rs remote server (debug probe access over WebSocket)
 After=network-online.target
 Wants=network-online.target
+# Allow up to 5 restarts within 60s before giving up; without this a crash-loop
+# (e.g. missing/malformed .probe-rs.toml) would hit the default start limit and
+# leave the unit permanently stopped.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -13,9 +18,9 @@ Type=simple
 # Setting HOME=@HOME@ ensures the home-directory search hits @HOME@/.probe-rs.toml.
 # WorkingDirectory=@HOME@ puts cwd there too, so cwd and $HOME searches converge
 # on the same directory — one file at @HOME@/.probe-rs.toml covers both.
-# The '-' prefix on WorkingDirectory suppresses the "not absolute" error when
-# verifying the unsubstituted template; after sed substitution it resolves to
-# an absolute path (e.g. /root) and the prefix has no effect.
+# The '-' prefix on WorkingDirectory means: if the directory does not exist
+# at service start, treat it as non-fatal and continue rather than failing
+# the unit. It has no effect when the directory exists (the common case).
 Environment=HOME=@HOME@
 WorkingDirectory=-@HOME@
 ExecStart=@PROBE_RS@ serve
