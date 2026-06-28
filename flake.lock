@@ -44,13 +44,16 @@
       },
       "locked": {
         "lastModified": 1782556078,
-        "narHash": "sha256-gTa+1raed3EULHmexO50oudhHPKV73E2I0RtSAOYZ2Y=",
-        "path": "/home/nixos/Workspace/kble-nix",
-        "type": "path"
+        "narHash": "sha256-jjj/YEEAKj4Id7sorwB2/+0TrSsrOmK6BPCudo3TCiQ=",
+        "owner": "Lugendre",
+        "repo": "kble-nix",
+        "rev": "08563fbf60e7840f71c2080f3bdbde3febbd2434",
+        "type": "github"
       },
       "original": {
-        "path": "/home/nixos/Workspace/kble-nix",
-        "type": "path"
+        "owner": "Lugendre",
+        "repo": "kble-nix",
+        "type": "github"
       }
     },
     "kble-src": {

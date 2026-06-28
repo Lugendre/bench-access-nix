@@ -8,11 +8,18 @@ Twingate越しに、Debianベンチホストのデバッグプローブ（probe-
 
 前提: Debian ホストに **Nix（flake 機能有効）がインストール済み**であること（`install.sh` が `nix build` を実行するため必須）。
 
+> **注意（`sudo` と PATH）**: `install.sh` は root 実行前提ですが、`sudo` 経由の非ログインシェルは `/etc/profile.d/nix.sh` を読まず、さらに `sudo` の `secure_path` で PATH が最小化されるため、**Nix が入っていても `nix` が PATH に無く**、`install.sh` が冒頭で `nix is not installed or not on PATH` と表示して停止することがあります（`ssh host 'cmd'` / `ssh -t host 'cmd'` も非ログインシェルなので同様）。下記のように **Nix daemon profile を source してから** 実行してください。
+
 ```bash
 git clone <repo-url> && cd bench-access-nix
+# sudo 経由では nix が PATH に無いことが多いため、daemon profile を source してから実行する
+# （source 先は Determinate / マルチユーザ標準パス。環境により異なる場合あり。
+#   binary は /nix/var/nix/profiles/default/bin/nix）
 # Twingate 到達 IF の IP を指定（取得できなければ 0.0.0.0 のまま + host firewall）
-sudo TWINGATE_ADDR=100.x.y.z ./install.sh
+sudo bash -c '. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh && TWINGATE_ADDR=100.x.y.z ./install.sh'
 ```
+
+> 既に root シェルにいて `nix` が PATH 上にある場合は、従来どおり `TWINGATE_ADDR=100.x.y.z ./install.sh` で構いません。
 
 `install.sh` は両サーバを `nix build` して `/opt/bench-access` に GC root として固定し、`/etc/bench-access/.probe-rs.toml`・udev ルール・systemd ユニットを設置して有効化します。
 
